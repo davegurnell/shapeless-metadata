@@ -1,7 +1,7 @@
 import shapeless._
 import play.api.libs.json._
 
-final case class Person(name: String, address: Address, pet: Pet)
+final case class Person(name: String, address: Address, pets: List[Pet])
 final case class Address(house: Int, street: String)
 
 sealed trait Pet
@@ -10,6 +10,7 @@ final case class Cat(name: String, evil: Boolean) extends Pet
 
 object Main extends App {
   val personMeta = Metadata[Person].get
+  println(personMeta)
   // Sum(
   //   "Person",
   //   List(
@@ -32,6 +33,7 @@ object Main extends App {
   // )
 
   val personJson = Json.toJson(personMeta)
+  println(Json.prettyPrint(personJson))
   // {
   //   "Person" : {
   //     "type" : "Sum",

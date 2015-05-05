@@ -1,10 +1,9 @@
 import shapeless._
 import shapeless.labelled._
 import shapeless.poly._
-import scala.reflect.runtime.{ universe => ru }
 
 trait Metadata[A] {
-  def get: DataType
+  def get: Schema
 }
 
 object Metadata extends MetadataConstructors
@@ -17,6 +16,19 @@ trait HighPriorityMetadataImplicits {
   implicit val stringMetadata  : Metadata[String]  = Metadata.atom[String]
   implicit val intMetadata     : Metadata[Int]     = Metadata.atom[Int]
   implicit val booleanMetadata : Metadata[Boolean] = Metadata.atom[Boolean]
+
+  implicit def seqMetadata[A, B[_] <: Seq[_]](implicit
+    itemMeta: Metadata[A],
+    collTypeable: Typeable[B[A]]
+  ): Metadata[B[A]] = {
+    val itemSchema = itemMeta.get
+    Metadata.array(s"${collTypeable.describe}", itemSchema)
+  }
+
+  // implicit def seqMetadata[A](implicit itemMeta: Metadata[A]): Metadata[Seq[A]] = {
+  //   val itemSchema = itemMeta.get
+  //   Metadata.array(s"Seq[${itemSchema.name}]", itemSchema)
+  // }
 }
 
 trait LowPriorityMetadataImplicits {
@@ -49,7 +61,7 @@ trait LowPriorityMetadataImplicits {
   }
 
   implicit def projectMetadata[F, G](implicit
-    typeTag: ru.TypeTag[F],
+    typeable: Typeable[F],
     gen: LabelledGeneric.Aux[F, G],
     gMeta: Lazy[Metadata[G]]
   ): Metadata[F] = {
@@ -58,27 +70,31 @@ trait LowPriorityMetadataImplicits {
 }
 
 trait MetadataConstructors {
-  private def nameOf[A](implicit typeTag: ru.TypeTag[A]): String =
-    typeTag.tpe.typeSymbol.name.toString
+  private def nameOf[A](implicit typeable: Typeable[A]): String =
+    typeable.describe
 
   def apply[A](implicit meta: Metadata[A]) =
     meta
 
-  def atom[A](implicit typeTag: ru.TypeTag[A]): Metadata[A] =
+  def atom[A](implicit typeable: Typeable[A]): Metadata[A] =
     new Metadata[A] { val get = Atom(nameOf[A]) }
 
-  def sum[A](name: String, fields: List[(String, DataType)]): Metadata[A] =
+  def sum[A](name: String, fields: List[(String, Schema)]): Metadata[A] =
     new Metadata[A] { val get = Sum(name, fields) }
 
-  def product[A](name: String, subtypes: List[DataType]): Metadata[A] =
+  def product[A](name: String, subtypes: List[Schema]): Metadata[A] =
     new Metadata[A] { val get = Product(name, subtypes) }
 
-  def project[A: ru.TypeTag, B](bMeta: Metadata[B]): Metadata[A] =
+  def array[A](name: String, item: Schema): Metadata[A] =
+    new Metadata[A] { val get = Sequence(name, item) }
+
+  def project[A: Typeable, B](bMeta: Metadata[B]): Metadata[A] =
     new Metadata[A] {
       val get = bMeta.get match {
         case Atom(name)            => Atom(nameOf[A])
         case Sum(name, fields)     => Sum(nameOf[A], fields)
         case Product(name, fields) => Product(nameOf[A], fields)
+        case Sequence(name, item)  => Sequence(nameOf[A], item)
       }
     }
 }
